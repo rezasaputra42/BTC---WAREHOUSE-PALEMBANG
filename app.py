@@ -10,8 +10,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- DATABASE SETUP (SQLite Local / Sync Ready) ---
-conn = sqlite3.connect('gudang_btc.db', check_same_thread=False)
+# --- DATABASE SETUP ---
+conn = sqlite3.connect('gudang_btc_v2.db', check_same_thread=False)
 c = conn.cursor()
 
 c.execute('''
@@ -87,14 +87,15 @@ DATA_SKU_INITIAL = [
     ("WW006", "WOOKEY BULKUP HONEY", "Produk Wookey", 0, "Rak C")
 ]
 
-# Auto-inject SKU master ke database jika belum ada
 for sku in DATA_SKU_INITIAL:
     c.execute("INSERT OR IGNORE INTO barang (kode_barang, nama_barang, kategori, stok, lokasi) VALUES (?, ?, ?, ?, ?)", sku)
 conn.commit()
 
-# --- FUNGSI AMBIL DATA ---
+# --- FUNGSI AMBIL DATA (SAFE INT CONVERSION) ---
 def get_barang():
-    return pd.read_sql_query("SELECT * FROM barang", conn)
+    df = pd.read_sql_query("SELECT * FROM barang", conn)
+    df['stok'] = pd.to_numeric(df['stok'], errors='coerce').fillna(0).astype(int)
+    return df
 
 def get_riwayat():
     return pd.read_sql_query("SELECT * FROM riwayat ORDER BY id DESC", conn)
@@ -143,7 +144,9 @@ elif menu == "📥 INBOUND (Barang Masuk)":
     kode_selected = selected.split(" | ")[0]
     
     row = df_barang[df_barang['kode_barang'] == kode_selected].iloc[0]
-    st.info(f"📌 **SKU:** {row['kode_barang']} — **Nama:** {row['nama_barang']} | **Stok Saat Ini:** {row['stok']} Pcs")
+    stok_saat_ini = int(row['stok'])
+    
+    st.info(f"📌 **SKU:** {row['kode_barang']} — **Nama:** {row['nama_barang']} | **Stok Saat Ini:** {stok_saat_ini} Pcs")
     
     with st.form("form_inbound", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -154,18 +157,16 @@ elif menu == "📥 INBOUND (Barang Masuk)":
         submit = st.form_submit_button("📥 Simpan Inbound", use_container_width=True)
         
         if submit:
-            stok_baru = row['stok'] + qty
+            stok_baru = stok_saat_ini + int(qty)
             tgl_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            # Update stok
             c.execute("UPDATE barang SET stok = ? WHERE kode_barang = ?", (stok_baru, kode_selected))
-            # Catat riwayat
             c.execute(
                 "INSERT INTO riwayat (tanggal, kode_barang, nama_barang, jenis, jumlah, keterangan, operator) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (tgl_now, kode_selected, row['nama_barang'], "INBOUND", qty, no_po, operator)
+                (tgl_now, kode_selected, row['nama_barang'], "INBOUND", int(qty), no_po, operator)
             )
             conn.commit()
-            st.success(f"✅ Inbound Berhasil! Stok {row['nama_barang']} bertambah dari {row['stok']} ➔ {stok_baru} Pcs.")
+            st.success(f"✅ Inbound Berhasil! Stok {row['nama_barang']} bertambah dari {stok_saat_ini} ➔ {stok_baru} Pcs.")
             st.rerun()
 
 # ==========================================
@@ -183,32 +184,32 @@ elif menu == "📤 OUTBOUND (Barang Keluar)":
     kode_selected = selected.split(" | ")[0]
     
     row = df_barang[df_barang['kode_barang'] == kode_selected].iloc[0]
-    st.info(f"📌 **SKU:** {row['kode_barang']} — **Nama:** {row['nama_barang']} | **Stok Saat Ini:** {row['stok']} Pcs")
+    stok_saat_ini = int(row['stok'])
+    
+    st.info(f"📌 **SKU:** {row['kode_barang']} — **Nama:** {row['nama_barang']} | **Stok Saat Ini:** {stok_saat_ini} Pcs")
     
     with st.form("form_outbound", clear_on_submit=True):
         col1, col2 = st.columns(2)
         qty = col1.number_input("Jumlah Barang Keluar (Pcs):", min_value=1, value=1)
-        no_resi = col2.text_input("Nomor Resi / Keterangan Kirim:", placeholder="Contoh: SPX-12345678 / Marketplace Order")
+        no_resi = col2.text_input("Nomor Resi / Keterangan Kirim:", placeholder="Contoh: SPX-12345678")
         operator = st.text_input("Nama Packer / Operator Outbound:", value="Reza Saputra")
         
         submit = st.form_submit_button("📤 Simpan Outbound", use_container_width=True)
         
         if submit:
-            if qty > row['stok']:
-                st.error(f"❌ Gagal Outbound! Stok tidak mencukupi (Tersedia: {row['stok']} Pcs, Diminta: {qty} Pcs).")
+            if int(qty) > stok_saat_ini:
+                st.error(f"❌ Gagal Outbound! Stok tidak mencukupi (Tersedia: {stok_saat_ini} Pcs, Diminta: {qty} Pcs).")
             else:
-                stok_baru = row['stok'] - qty
+                stok_baru = stok_saat_ini - int(qty)
                 tgl_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # Update stok
                 c.execute("UPDATE barang SET stok = ? WHERE kode_barang = ?", (stok_baru, kode_selected))
-                # Catat riwayat
                 c.execute(
                     "INSERT INTO riwayat (tanggal, kode_barang, nama_barang, jenis, jumlah, keterangan, operator) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (tgl_now, kode_selected, row['nama_barang'], "OUTBOUND", qty, no_resi, operator)
+                    (tgl_now, kode_selected, row['nama_barang'], "OUTBOUND", int(qty), no_resi, operator)
                 )
                 conn.commit()
-                st.success(f"✅ Outbound Berhasil! Stok {row['nama_barang']} berkurang dari {row['stok']} ➔ {stok_baru} Pcs.")
+                st.success(f"✅ Outbound Berhasil! Stok {row['nama_barang']} berkurang dari {stok_saat_ini} ➔ {stok_baru} Pcs.")
                 st.rerun()
 
 # ==========================================
