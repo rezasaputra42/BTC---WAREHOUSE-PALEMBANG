@@ -5,13 +5,13 @@ from datetime import datetime
 
 # --- CONFIGURASI HALAMAN ---
 st.set_page_config(
-    page_title="BTC Warehouse - Inbound & Outbound",
+    page_title="BTC Warehouse - Operational Portal",
     page_icon="📦",
     layout="wide"
 )
 
 # --- DATABASE SETUP ---
-conn = sqlite3.connect('gudang_btc_v2.db', check_same_thread=False)
+conn = sqlite3.connect('gudang_btc_card.db', check_same_thread=False)
 c = conn.cursor()
 
 c.execute('''
@@ -38,7 +38,7 @@ c.execute('''
 ''')
 conn.commit()
 
-# --- DAFTAR SKU BARANG MASTER ---
+# --- DAFTAR SKU MASTER ---
 DATA_SKU_INITIAL = [
     ("MC001", "JAKET HOODIE WOOKEY WIGHT", "Merchandise", 0, "Rak A"),
     ("MC002", "KAOS WOOKEY WIGHT", "Merchandise", 0, "Rak A"),
@@ -91,7 +91,7 @@ for sku in DATA_SKU_INITIAL:
     c.execute("INSERT OR IGNORE INTO barang (kode_barang, nama_barang, kategori, stok, lokasi) VALUES (?, ?, ?, ?, ?)", sku)
 conn.commit()
 
-# --- FUNGSI AMBIL DATA (SAFE INT CONVERSION) ---
+# --- FUNGSI AMBIL DATA ---
 def get_barang():
     df = pd.read_sql_query("SELECT * FROM barang", conn)
     df['stok'] = pd.to_numeric(df['stok'], errors='coerce').fillna(0).astype(int)
@@ -100,26 +100,43 @@ def get_barang():
 def get_riwayat():
     return pd.read_sql_query("SELECT * FROM riwayat ORDER BY id DESC", conn)
 
-# --- SIDEBAR NAVIGASI ---
-st.sidebar.title("📦 BTC WAREHOUSE")
-st.sidebar.caption("Sistem Inbound & Outbound Palembang")
+# --- SESSION MENU UTAMA ---
+if 'active_menu' not in st.session_state:
+    st.session_state['active_menu'] = 'Stock'
 
-menu = st.sidebar.radio("Pilih Menu Operational:", [
-    "📊 Stock Monitoring",
-    "📥 INBOUND (Barang Masuk)",
-    "📤 OUTBOUND (Barang Keluar)",
-    "📜 Riwayat Transaksi"
-])
+# --- HEADER PORTAL ---
+st.title("🏢 BTC WAREHOUSE PALEMBANG")
+st.caption("Sistem Manajemen Inbound, Outbound & Stok Barang Terpadu")
+st.markdown("---")
 
 # ==========================================
-# 1. STOCK MONITORING
+# GRID CARD NAVIGATION (OPTION 2)
 # ==========================================
-if menu == "📊 Stock Monitoring":
-    st.title("📊 Monitoring Stok Real-time")
-    st.markdown("---")
+col1, col2, col3, col4 = st.columns(4)
+
+if col1.button("📊\n\n**STOCK MONITORING**", use_container_width=True):
+    st.session_state['active_menu'] = 'Stock'
+
+if col2.button("📥\n\n**INBOUND (MASUK)**", use_container_width=True):
+    st.session_state['active_menu'] = 'Inbound'
+
+if col3.button("📤\n\n**OUTBOUND (KELUAR)**", use_container_width=True):
+    st.session_state['active_menu'] = 'Outbound'
+
+if col4.button("📜\n\n**RIWAYAT TRANSAKSI**", use_container_width=True):
+    st.session_state['active_menu'] = 'Riwayat'
+
+st.markdown("---")
+
+# ==========================================
+# 1. MENU STOCK MONITORING
+# ==========================================
+if st.session_state['active_menu'] == 'Stock':
+    st.subheader("📊 Monitoring Stok Real-Time")
     
     df_barang = get_barang()
     
+    # Pencarian
     search = st.text_input("🔍 Cari SKU / Nama Barang:")
     if search:
         df_barang = df_barang[
@@ -132,10 +149,8 @@ if menu == "📊 Stock Monitoring":
 # ==========================================
 # 2. MENU INBOUND (BARANG MASUK)
 # ==========================================
-elif menu == "📥 INBOUND (Barang Masuk)":
-    st.title("📥 Inbound - Penerimaan Barang Masuk")
-    st.caption("Pencatatan Restok dari Supplier / Pabrik")
-    st.markdown("---")
+elif st.session_state['active_menu'] == 'Inbound':
+    st.subheader("📥 Inbound - Penerimaan Barang Masuk")
     
     df_barang = get_barang()
     options = df_barang['kode_barang'] + " | " + df_barang['nama_barang']
@@ -149,9 +164,9 @@ elif menu == "📥 INBOUND (Barang Masuk)":
     st.info(f"📌 **SKU:** {row['kode_barang']} — **Nama:** {row['nama_barang']} | **Stok Saat Ini:** {stok_saat_ini} Pcs")
     
     with st.form("form_inbound", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        qty = col1.number_input("Jumlah Barang Masuk (Pcs):", min_value=1, value=1)
-        no_po = col2.text_input("Nomor PO / Surat Jalan Masuk:", placeholder="Contoh: PO-2026-001")
+        c_in1, c_in2 = st.columns(2)
+        qty = c_in1.number_input("Jumlah Barang Masuk (Pcs):", min_value=1, value=1)
+        no_po = c_in2.text_input("Nomor PO / Surat Jalan Masuk:", placeholder="Contoh: PO-2026-001")
         operator = st.text_input("Nama Checker / Operator Inbound:", value="Reza Saputra")
         
         submit = st.form_submit_button("📥 Simpan Inbound", use_container_width=True)
@@ -172,10 +187,8 @@ elif menu == "📥 INBOUND (Barang Masuk)":
 # ==========================================
 # 3. MENU OUTBOUND (BARANG KELUAR)
 # ==========================================
-elif menu == "📤 OUTBOUND (Barang Keluar)":
-    st.title("📤 Outbound - Pengeluaran Barang / Packing")
-    st.caption("Pencatatan Pengeluaran Barang untuk Pesanan / Pengiriman")
-    st.markdown("---")
+elif st.session_state['active_menu'] == 'Outbound':
+    st.subheader("📤 Outbound - Pengeluaran Barang / Packing")
     
     df_barang = get_barang()
     options = df_barang['kode_barang'] + " | " + df_barang['nama_barang']
@@ -189,9 +202,9 @@ elif menu == "📤 OUTBOUND (Barang Keluar)":
     st.info(f"📌 **SKU:** {row['kode_barang']} — **Nama:** {row['nama_barang']} | **Stok Saat Ini:** {stok_saat_ini} Pcs")
     
     with st.form("form_outbound", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        qty = col1.number_input("Jumlah Barang Keluar (Pcs):", min_value=1, value=1)
-        no_resi = col2.text_input("Nomor Resi / Keterangan Kirim:", placeholder="Contoh: SPX-12345678")
+        c_out1, c_out2 = st.columns(2)
+        qty = c_out1.number_input("Jumlah Barang Keluar (Pcs):", min_value=1, value=1)
+        no_resi = c_out2.text_input("Nomor Resi / Keterangan Kirim:", placeholder="Contoh: SPX-12345678")
         operator = st.text_input("Nama Packer / Operator Outbound:", value="Reza Saputra")
         
         submit = st.form_submit_button("📤 Simpan Outbound", use_container_width=True)
@@ -215,9 +228,8 @@ elif menu == "📤 OUTBOUND (Barang Keluar)":
 # ==========================================
 # 4. MENU RIWAYAT TRANSAKSI
 # ==========================================
-elif menu == "📜 Riwayat Transaksi":
-    st.title("📜 Log Transaksi Inbound & Outbound")
-    st.markdown("---")
+elif st.session_state['active_menu'] == 'Riwayat':
+    st.subheader("📜 Log Transaksi Inbound & Outbound")
     
     df_riwayat = get_riwayat()
     if not df_riwayat.empty:
