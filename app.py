@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
 # --- CONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -10,27 +9,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# === SPREADSHEET ID GOOGLE SHEETS ===
 SPREADSHEET_ID = "1tn0F59DUG37uW7YmxerEEc721RUeGmfVtTzEazg5t9g"
-SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
 
-# --- KONEKSI GSHEETS DENGAN SERVICE ACCOUNT ---
-conn = st.connection("gsheets", type=GSheetsConnection)
-
+# --- FUNGSI BACA DATA BACA LANGSUNG DARI CSV GOOGLE SHEETS ---
 def get_data(sheet_name):
     try:
-        df = conn.read(spreadsheet=SHEET_URL, worksheet=sheet_name, ttl=0)
+        url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+        df = pd.read_csv(url)
         df.columns = [str(col).strip().lower() for col in df.columns]
         return df
     except Exception as e:
-        st.error(f"Gagal membaca tab '{sheet_name}'. Detail: {e}")
+        st.error(f"Gagal membaca tab {sheet_name}: {e}")
         return pd.DataFrame()
-
-def save_data(sheet_name, df):
-    try:
-        conn.update(spreadsheet=SHEET_URL, worksheet=sheet_name, data=df)
-    except Exception as e:
-        st.error(f"Gagal menyimpan ke tab '{sheet_name}'. Detail: {e}")
 
 # --- SESSION STATE LOGIN & NAVIGASI ---
 if 'logged_in' not in st.session_state:
@@ -86,22 +76,19 @@ if not st.session_state['logged_in']:
                         }
                         st.rerun()
                     else:
-                        st.error("Email atau Password salah! Periksa kembali data Anda di tab AKUN Google Sheets.")
+                        st.error("Email atau Password salah! Cek data di Google Sheets.")
                 else:
-                    st.error("Gagal membaca struktur data di tab AKUN Google Sheets.")
+                    st.error("Gagal membaca data tab AKUN.")
             else:
-                st.warning("Masukkan Email dan Password terlebih dahulu.")
-                
+                st.warning("Masukkan Email dan Password.")
         st.caption("Belum punya akun? Minta admin untuk membuatkan sub-account.")
     st.stop()
 
 # ==========================================
-# 2. HALAMAN UTAMA (DASHBOARD OPERASIONAL)
+# 2. HALAMAN UTAMA
 # ==========================================
-
-# Sidebar Profil & Logout
 st.sidebar.markdown(f"👤 **{st.session_state['user_info']['nama']}**")
-st.sidebar.caption(f"Role: {st.session_state['user_info']['role']}\n\nEmail: {st.session_state['user_info']['email']}")
+st.sidebar.caption(f"Role: {st.session_state['user_info']['role']}\n\n{st.session_state['user_info']['email']}")
 
 if st.sidebar.button("🚪 Logout / Keluar", use_container_width=True):
     st.session_state['logged_in'] = False
@@ -109,35 +96,25 @@ if st.sidebar.button("🚪 Logout / Keluar", use_container_width=True):
     st.rerun()
 
 st.title("🏢 DASHBOARD GUDANG PALEMBANG")
-st.caption("Sistem Operational Inbound & Outbound Real-Time")
 st.markdown("---")
 
-# Menu Navigasi Kartu
 col1, col2, col3, col4 = st.columns(4)
 
 if col1.button("📊\n\n**STOCK MONITORING**", use_container_width=True):
     st.session_state['active_menu'] = 'Stock'
-
 if col2.button("📥\n\n**INBOUND (MASUK)**", use_container_width=True):
     st.session_state['active_menu'] = 'Inbound'
-
 if col3.button("📤\n\n**OUTBOUND (KELUAR)**", use_container_width=True):
     st.session_state['active_menu'] = 'Outbound'
-
 if col4.button("📜\n\n**RIWAYAT TRANSAKSI**", use_container_width=True):
     st.session_state['active_menu'] = 'Riwayat'
 
 st.markdown("---")
 
-# --- A. STOCK MONITORING ---
 if st.session_state['active_menu'] == 'Stock':
-    st.subheader("📊 Monitoring Stok Real-Time (Tab BARANG)")
+    st.subheader("📊 Monitoring Stok Real-Time")
     df_barang = get_data("BARANG")
-    
     if not df_barang.empty:
-        if 'stok' in df_barang.columns:
-            df_barang['stok'] = pd.to_numeric(df_barang['stok'], errors='coerce').fillna(0).astype(int)
-            
         search = st.text_input("🔍 Cari SKU / Nama Barang:")
         if search:
             df_barang = df_barang[
@@ -145,115 +122,7 @@ if st.session_state['active_menu'] == 'Stock':
                 df_barang['kode_barang'].astype(str).str.contains(search, case=False)
             ]
         st.dataframe(df_barang, use_container_width=True, hide_index=True)
-    else:
-        st.info("Data barang kosong atau tidak dapat dimuat.")
 
-# --- B. INBOUND (BARANG MASUK) ---
-elif st.session_state['active_menu'] == 'Inbound':
-    st.subheader("📥 Inbound - Penerimaan Barang Masuk")
-    df_barang = get_data("BARANG")
-    
-    if not df_barang.empty and 'kode_barang' in df_barang.columns:
-        df_barang['stok'] = pd.to_numeric(df_barang.get('stok', 0), errors='coerce').fillna(0).astype(int)
-        
-        options = df_barang['kode_barang'].astype(str) + " | " + df_barang['nama_barang'].astype(str)
-        selected = st.selectbox("Pilih SKU Barang Masuk:", options)
-        kode_selected = selected.split(" | ")[0]
-        
-        idx = df_barang[df_barang['kode_barang'].astype(str) == kode_selected].index[0]
-        stok_saat_ini = int(df_barang.at[idx, 'stok'])
-        nama_selected = df_barang.at[idx, 'nama_barang']
-        
-        st.info(f"📌 **SKU:** {kode_selected} — **Nama:** {nama_selected} | **Stok Saat Ini:** {stok_saat_ini} Pcs")
-        
-        with st.form("form_inbound", clear_on_submit=True):
-            c_in1, c_in2 = st.columns(2)
-            qty = c_in1.number_input("Jumlah Barang Masuk (Pcs):", min_value=1, value=1)
-            no_po = c_in2.text_input("Nomor PO / Surat Jalan Masuk:", placeholder="Contoh: PO-2026-001")
-            
-            submit = st.form_submit_button("📥 Simpan ke Google Sheets", use_container_width=True)
-            
-            if submit:
-                stok_baru = stok_saat_ini + int(qty)
-                tgl_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Update stok di BARANG
-                df_barang.at[idx, 'stok'] = stok_baru
-                save_data("BARANG", df_barang)
-                
-                # Catat ke RIWAYAT
-                df_riwayat = get_data("RIWAYAT")
-                new_log = pd.DataFrame([{
-                    'tanggal': tgl_now,
-                    'kode_barang': kode_selected,
-                    'nama_barang': nama_selected,
-                    'jenis': "INBOUND",
-                    'jumlah': int(qty),
-                    'keterangan': no_po,
-                    'operator': st.session_state['user_info']['nama']
-                }])
-                save_data("RIWAYAT", pd.concat([df_riwayat, new_log], ignore_index=True))
-                
-                st.success(f"✅ Inbound Berhasil! Stok baru: {stok_baru} Pcs.")
-                st.rerun()
-
-# --- C. OUTBOUND (BARANG KELUAR) ---
-elif st.session_state['active_menu'] == 'Outbound':
-    st.subheader("📤 Outbound - Pengeluaran Barang / Packing")
-    df_barang = get_data("BARANG")
-    
-    if not df_barang.empty and 'kode_barang' in df_barang.columns:
-        df_barang['stok'] = pd.to_numeric(df_barang.get('stok', 0), errors='coerce').fillna(0).astype(int)
-        
-        options = df_barang['kode_barang'].astype(str) + " | " + df_barang['nama_barang'].astype(str)
-        selected = st.selectbox("Pilih SKU Barang Keluar:", options)
-        kode_selected = selected.split(" | ")[0]
-        
-        idx = df_barang[df_barang['kode_barang'].astype(str) == kode_selected].index[0]
-        stok_saat_ini = int(df_barang.at[idx, 'stok'])
-        nama_selected = df_barang.at[idx, 'nama_barang']
-        
-        st.info(f"📌 **SKU:** {kode_selected} — **Nama:** {nama_selected} | **Stok Saat Ini:** {stok_saat_ini} Pcs")
-        
-        with st.form("form_outbound", clear_on_submit=True):
-            c_out1, c_out2 = st.columns(2)
-            qty = c_out1.number_input("Jumlah Barang Keluar (Pcs):", min_value=1, value=1)
-            no_resi = c_out2.text_input("Nomor Resi / Keterangan Kirim:", placeholder="Contoh: SPX-12345678")
-            
-            submit = st.form_submit_button("📤 Simpan ke Google Sheets", use_container_width=True)
-            
-            if submit:
-                if int(qty) > stok_saat_ini:
-                    st.error(f"❌ Gagal Outbound! Stok tidak mencukupi (Tersedia: {stok_saat_ini} Pcs).")
-                else:
-                    stok_baru = stok_saat_ini - int(qty)
-                    tgl_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    # Update stok di BARANG
-                    df_barang.at[idx, 'stok'] = stok_baru
-                    save_data("BARANG", df_barang)
-                    
-                    # Catat ke RIWAYAT
-                    df_riwayat = get_data("RIWAYAT")
-                    new_log = pd.DataFrame([{
-                        'tanggal': tgl_now,
-                        'kode_barang': kode_selected,
-                        'nama_barang': nama_selected,
-                        'jenis': "OUTBOUND",
-                        'jumlah': int(qty),
-                        'keterangan': no_resi,
-                        'operator': st.session_state['user_info']['nama']
-                    }])
-                    save_data("RIWAYAT", pd.concat([df_riwayat, new_log], ignore_index=True))
-                    
-                    st.success(f"✅ Outbound Berhasil! Sisa stok: {stok_baru} Pcs.")
-                    st.rerun()
-
-# --- D. RIWAYAT TRANSAKSI ---
 elif st.session_state['active_menu'] == 'Riwayat':
-    st.subheader("📜 Log Transaksi Inbound & Outbound (Tab RIWAYAT)")
-    df_riwayat = get_data("RIWAYAT")
-    if not df_riwayat.empty:
-        st.dataframe(df_riwayat, use_container_width=True, hide_index=True)
-    else:
-        st.info("Belum ada riwayat transaksi recorded.")
+    st.subheader("📜 Log Transaksi Inbound & Outbound")
+    st.dataframe(get_data("RIWAYAT"), use_container_width=True, hide_index=True)
