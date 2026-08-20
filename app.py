@@ -4,14 +4,14 @@ from datetime import datetime
 
 # --- CONFIGURASI HALAMAN ---
 st.set_page_config(
-    page_title="BTC Warehouse Palembang",
+    page_title="BTC Warehouse Palembang - Dashboard Gudang Internal",
     page_icon="📦",
     layout="wide"
 )
 
 SPREADSHEET_ID = "1tn0F59DUG37uW7YmxerEEc721RUeGmfVtTzEazg5t9g"
 
-# --- FUNGSI BACA DATA BACA LANGSUNG DARI CSV GOOGLE SHEETS ---
+# --- FUNGSI BACA DATA LANGSUNG DARI CSV GOOGLE SHEETS ---
 def get_data(sheet_name):
     try:
         url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
@@ -36,7 +36,7 @@ if 'active_menu' not in st.session_state:
 if not st.session_state['logged_in']:
     st.markdown("""
         <div style="background-color: #2b7a78; padding: 18px 25px; border-radius: 12px; color: white; margin-bottom: 25px;">
-            <h2 style="margin:0; color: white; font-weight: 600;">📦 BTC Warehouse — Dashboard Sortir Order</h2>
+            <h2 style="margin:0; color: white; font-weight: 600;">📦 BTC Warehouse Palembang — Dashboard Gudang Internal</h2>
             <p style="margin:6px 0 0 0; opacity: 0.9; font-size: 14px;">Masuk dengan akun kamu untuk melanjutkan.</p>
         </div>
     """, unsafe_allow_html=True)
@@ -95,7 +95,7 @@ if st.sidebar.button("🚪 Logout / Keluar", use_container_width=True):
     st.session_state['user_info'] = {}
     st.rerun()
 
-st.title("🏢 DASHBOARD GUDANG PALEMBANG")
+st.title("🏢 BTC Warehouse Palembang - Dashboard Gudang Internal")
 st.markdown("---")
 
 col1, col2, col3, col4 = st.columns(4)
