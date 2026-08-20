@@ -22,7 +22,7 @@ def get_users():
         df = conn.read(spreadsheet=SHEET_URL, worksheet="AKUN", ttl=0)
         return df
     except Exception:
-        # Fallback jika tab AKUN belum dibaca/dibuat
+        # Fallback default admin jika tab AKUN belum terbaca
         return pd.DataFrame([
             {"email": "rezasaputra42@gmail.com", "password": "admin", "nama": "Reza Saputra", "role": "Admin"}
         ])
@@ -57,7 +57,7 @@ if 'active_menu' not in st.session_state:
     st.session_state['active_menu'] = 'Stock'
 
 # ==========================================
-# HALAMAN LOGIN (SAMA DENGAN TAMPILAN GAMBAR)
+# HALAMAN LOGIN (SESUAI DESAIN TAMPILAN)
 # ==========================================
 if not st.session_state['logged_in']:
     st.markdown("""
@@ -80,10 +80,17 @@ if not st.session_state['logged_in']:
             if email_input and pass_input:
                 df_users = get_users()
                 
-                # Cek kecocokan Email & Password dari tab AKUN Google Sheets
+                # TOLERANSI SPASI DENGAN STRIP() & LOWER()
+                clean_email_input = email_input.lower().strip()
+                clean_pass_input = pass_input.strip()
+                
+                # Pembersihan data dari Google Sheets
+                df_users['clean_email'] = df_users['email'].astype(str).str.lower().str.strip()
+                df_users['clean_pass'] = df_users['password'].astype(str).str.strip()
+                
                 user_match = df_users[
-                    (df_users['email'].astype(str).str.lower() == email_input.lower().strip()) & 
-                    (df_users['password'].astype(str) == pass_input.strip())
+                    (df_users['clean_email'] == clean_email_input) & 
+                    (df_users['clean_pass'] == clean_pass_input)
                 ]
                 
                 if not user_match.empty:
@@ -105,12 +112,12 @@ if not st.session_state['logged_in']:
     st.stop()
 
 # ==========================================
-# HALAMAN UTAMA (SETELAH LOGIN BERHASIL)
+# HALAMAN UTAMA (PORTAL KARTU MENU)
 # ==========================================
 
-# Info User & Logout di Sidebar
+# Sidebar Profil User
 st.sidebar.markdown(f"👤 **{st.session_state['user_info']['nama']}**")
-st.sidebar.caption(f"Role: {st.session_state['user_info']['role']} ({st.session_state['user_info']['email']})")
+st.sidebar.caption(f"Role: {st.session_state['user_info']['role']}\n\nEmail: {st.session_state['user_info']['email']}")
 
 if st.sidebar.button("🚪 Logout / Keluar", use_container_width=True):
     st.session_state['logged_in'] = False
@@ -121,7 +128,7 @@ st.title("🏢 DASHBOARD GUDANG PALEMBANG")
 st.caption("Sistem Operational Inbound & Outbound Real-Time")
 st.markdown("---")
 
-# Navigation Grid Card
+# Grid Card Navigation
 col1, col2, col3, col4 = st.columns(4)
 
 if col1.button("📊\n\n**STOCK MONITORING**", use_container_width=True):
