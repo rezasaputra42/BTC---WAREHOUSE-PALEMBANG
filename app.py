@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# === SPREADSHEET ID SAMA DENGAN LINK GOOGLE SHEETS KAMU ===
+# === SPREADSHEET ID ===
 SPREADSHEET_ID = "1tn0F59DUG37uW7YmxerEEc721RUeGmfVtTzEazg5t9g"
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}"
 
@@ -19,17 +19,19 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_users():
     try:
+        # ttl=0 agar selalu mengambil data paling baru tanpa cache
         df = conn.read(spreadsheet=SHEET_URL, worksheet="AKUN", ttl=0)
+        # Normalisasi nama kolom menjadi huruf kecil semua
+        df.columns = [str(col).strip().lower() for col in df.columns]
         return df
-    except Exception:
-        # Fallback default admin jika tab AKUN belum terbaca
-        return pd.DataFrame([
-            {"email": "rezasaputra42@gmail.com", "password": "admin", "nama": "Reza Saputra", "role": "Admin"}
-        ])
+    except Exception as e:
+        st.error(f"Gagal membaca tab AKUN: {e}")
+        return pd.DataFrame()
 
 def get_barang():
     try:
         df = conn.read(spreadsheet=SHEET_URL, worksheet="BARANG", ttl=0)
+        df.columns = [str(col).strip().lower() for col in df.columns]
         if not df.empty and 'stok' in df.columns:
             df['stok'] = pd.to_numeric(df['stok'], errors='coerce').fillna(0).astype(int)
         return df
@@ -38,7 +40,9 @@ def get_barang():
 
 def get_riwayat():
     try:
-        return conn.read(spreadsheet=SHEET_URL, worksheet="RIWAYAT", ttl=0)
+        df = conn.read(spreadsheet=SHEET_URL, worksheet="RIWAYAT", ttl=0)
+        df.columns = [str(col).strip().lower() for col in df.columns]
+        return df
     except Exception:
         return pd.DataFrame()
 
@@ -57,7 +61,7 @@ if 'active_menu' not in st.session_state:
     st.session_state['active_menu'] = 'Stock'
 
 # ==========================================
-# HALAMAN LOGIN (SESUAI DESAIN TAMPILAN)
+# HALAMAN LOGIN
 # ==========================================
 if not st.session_state['logged_in']:
     st.markdown("""
@@ -80,42 +84,49 @@ if not st.session_state['logged_in']:
             if email_input and pass_input:
                 df_users = get_users()
                 
-                # TOLERANSI SPASI DENGAN STRIP() & LOWER()
-                clean_email_input = email_input.lower().strip()
-                clean_pass_input = pass_input.strip()
-                
-                # Pembersihan data dari Google Sheets
-                df_users['clean_email'] = df_users['email'].astype(str).str.lower().str.strip()
-                df_users['clean_pass'] = df_users['password'].astype(str).str.strip()
-                
-                user_match = df_users[
-                    (df_users['clean_email'] == clean_email_input) & 
-                    (df_users['clean_pass'] == clean_pass_input)
-                ]
-                
-                if not user_match.empty:
-                    user_data = user_match.iloc[0]
-                    st.session_state['logged_in'] = True
-                    st.session_state['user_info'] = {
-                        'email': user_data['email'],
-                        'nama': user_data['nama'],
-                        'role': user_data['role']
-                    }
-                    st.success(f"Selamat datang, {user_data['nama']}!")
-                    st.rerun()
+                if not df_users.empty and 'email' in df_users.columns and 'password' in df_users.columns:
+                    clean_email_input = email_input.lower().strip()
+                    clean_pass_input = pass_input.strip()
+                    
+                    df_users['clean_email'] = df_users['email'].astype(str).str.lower().str.strip()
+                    df_users['clean_pass'] = df_users['password'].astype(str).str.strip()
+                    
+                    user_match = df_users[
+                        (df_users['clean_email'] == clean_email_input) & 
+                        (df_users['clean_pass'] == clean_pass_input)
+                    ]
+                    
+                    if not user_match.empty:
+                        user_data = user_match.iloc[0]
+                        st.session_state['logged_in'] = True
+                        st.session_state['user_info'] = {
+                            'email': user_data['email'],
+                            'nama': user_data.get('nama', 'User'),
+                            'role': user_data.get('role', 'Staf')
+                        }
+                        st.success(f"Selamat datang, {st.session_state['user_info']['nama']}!")
+                        st.rerun()
+                    else:
+                        st.error("Email atau Password salah! Periksa kembali data Anda di tab AKUN Google Sheets.")
                 else:
-                    st.error("Email atau Password salah! Periksa kembali data Anda di tab AKUN Google Sheets.")
+                    st.error("Data tab AKUN gagal dibaca dari Google Sheets. Pastikan header kolom adalah email, password, nama, role.")
             else:
                 st.warning("Masukkan Email dan Password terlebih dahulu.")
                 
         st.caption("Belum punya akun? Minta admin untuk membuatkan sub-account.")
+        
+        # Tombol Reset Cache jika data sheets baru saja diubah
+        if st.button("🔄 Refresh Data Google Sheets"):
+            st.cache_data.clear()
+            st.success("Cache dibersihkan, silakan coba login lagi.")
+            st.rerun()
+            
     st.stop()
 
 # ==========================================
-# HALAMAN UTAMA (PORTAL KARTU MENU)
+# HALAMAN UTAMA (PORTAL)
 # ==========================================
 
-# Sidebar Profil User
 st.sidebar.markdown(f"👤 **{st.session_state['user_info']['nama']}**")
 st.sidebar.caption(f"Role: {st.session_state['user_info']['role']}\n\nEmail: {st.session_state['user_info']['email']}")
 
@@ -128,7 +139,6 @@ st.title("🏢 DASHBOARD GUDANG PALEMBANG")
 st.caption("Sistem Operational Inbound & Outbound Real-Time")
 st.markdown("---")
 
-# Grid Card Navigation
 col1, col2, col3, col4 = st.columns(4)
 
 if col1.button("📊\n\n**STOCK MONITORING**", use_container_width=True):
@@ -190,13 +200,13 @@ elif st.session_state['active_menu'] == 'Inbound':
                 
                 df_riwayat = get_riwayat()
                 new_log = pd.DataFrame([{
-                    'Tanggal': tgl_now,
-                    'Kode_Barang': kode_selected,
-                    'Nama_Barang': nama_selected,
-                    'Jenis': "INBOUND",
-                    'Jumlah': int(qty),
-                    'Keterangan': no_po,
-                    'Operator': st.session_state['user_info']['nama']
+                    'tanggal': tgl_now,
+                    'kode_barang': kode_selected,
+                    'nama_barang': nama_selected,
+                    'jenis': "INBOUND",
+                    'jumlah': int(qty),
+                    'keterangan': no_po,
+                    'operator': st.session_state['user_info']['nama']
                 }])
                 save_riwayat(pd.concat([df_riwayat, new_log], ignore_index=True))
                 
@@ -238,13 +248,13 @@ elif st.session_state['active_menu'] == 'Outbound':
                     
                     df_riwayat = get_riwayat()
                     new_log = pd.DataFrame([{
-                        'Tanggal': tgl_now,
-                        'Kode_Barang': kode_selected,
-                        'Nama_Barang': nama_selected,
-                        'Jenis': "OUTBOUND",
-                        'Jumlah': int(qty),
-                        'Keterangan': no_resi,
-                        'Operator': st.session_state['user_info']['nama']
+                        'tanggal': tgl_now,
+                        'kode_barang': kode_selected,
+                        'nama_barang': nama_selected,
+                        'jenis': "OUTBOUND",
+                        'jumlah': int(qty),
+                        'keterangan': no_resi,
+                        'operator': st.session_state['user_info']['nama']
                     }])
                     save_riwayat(pd.concat([df_riwayat, new_log], ignore_index=True))
                     
