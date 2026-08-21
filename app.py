@@ -79,13 +79,12 @@ def append_row_to_sheet(sheet_name, row_values):
 # STAFF / LOGIN
 # ==================================================================
 DEFAULT_STAFF = [
-    {"username": "admin", "password": "admin123", "nama": "Admin Gudang", "role": "admin"},
-    {"username": "staff", "password": "staff123", "nama": "Staff Gudang", "role": "staff"},
+    {"email": "admin@gudangkit.local", "password": "admin123", "nama": "Admin Gudang", "role": "admin"},
 ]
 
 def get_staff_list():
-    df = get_data("staff")
-    if df is not None and "username" in df.columns and "password" in df.columns:
+    df = get_data("AKUN")
+    if df is not None and "email" in df.columns and "password" in df.columns:
         return df.to_dict("records")
     return DEFAULT_STAFF.copy()
 
@@ -100,19 +99,33 @@ def login_form():
     _, mid, _ = st.columns([1, 1.2, 1])
     with mid:
         with st.form("login_form"):
-            username = st.text_input("Username")
+            email = st.text_input("Email")
             password = st.text_input("Password", type="password")
             submitted = st.form_submit_button("Masuk", type="primary", use_container_width=True)
         if submitted:
             staff_list = get_staff_list()
-            match = next((s for s in staff_list if str(s.get("username", "")).strip() == username.strip()), None)
-            if match and str(match.get("password", "")) == password:
+            match = next(
+                (s for s in staff_list if str(s.get("email", "")).strip().lower() == email.strip().lower()),
+                None,
+            )
+            if match and str(match.get("password", "")).strip() == password.strip():
                 st.session_state.logged_in = True
                 st.session_state.current_user = match
                 st.rerun()
             else:
-                st.error("Username atau password salah.")
-        st.caption("Akun default: `admin` / `admin123` atau `staff` / `staff123`. Bisa diganti lewat tab `staff` di Google Sheets (kolom: username, password, nama, role).")
+                st.error("Email atau password salah.")
+                with st.expander("🔍 Kenapa bisa gagal? (info debug)"):
+                    sheet_df = get_data("AKUN")
+                    if sheet_df is None:
+                        st.write("Tab `AKUN` di Google Sheets **tidak terbaca** — memakai akun bawaan.")
+                    elif "email" not in sheet_df.columns or "password" not in sheet_df.columns:
+                        st.write("Tab `AKUN` **terbaca** tapi kolom `email`/`password` tidak ditemukan.")
+                        st.write("Kolom yang terbaca:", list(sheet_df.columns))
+                    else:
+                        st.write(f"Tab `AKUN` terbaca, berisi {len(sheet_df)} akun. Email yang terdaftar:")
+                        st.write(sheet_df["email"].astype(str).tolist())
+                        st.caption("Kalau email kamu tidak ada di daftar itu, cek lagi ejaan email atau apakah Sheet sudah di-share sebagai 'Anyone with the link'.")
+        st.caption("Login pakai email & password yang terdaftar di tab `AKUN` pada Google Sheets.")
 
 
 # ==================================================================
@@ -601,7 +614,7 @@ elif page == "Pengaturan":
 
     st.divider()
     st.markdown("#### Daftar staff")
-    st.caption("Sumber: tab `staff` di Google Sheets (kolom: username, password, nama, role). Kalau belum ada, dipakai akun bawaan.")
+    st.caption("Sumber: tab `AKUN` di Google Sheets (kolom: email, password, nama, role). Kalau belum ada, dipakai akun bawaan.")
     staff_df = pd.DataFrame(get_staff_list())
     if "password" in staff_df.columns:
         staff_df = staff_df.drop(columns=["password"])
