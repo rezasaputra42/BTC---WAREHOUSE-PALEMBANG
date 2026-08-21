@@ -1,4 +1,5 @@
-streamlit
-pandas
-plotly
-st-gsheets-connection
+streamlit>=1.32
+pandas>=2.0
+pdfplumber>=0.10
+gspread>=6.0
+google-auth>=2.28
